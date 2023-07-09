@@ -1,0 +1,57 @@
+name: dotnet build and test
+
+#on:
+#  pull_request:
+#    types: [closed]
+
+on:
+  push:
+    branches:
+      - main
+
+env:  
+  AWS_REGION : eu-west-2 #Change to reflect your Region
+    
+permissions:
+  id-token: write   # This is required for requesting the JWT
+  contents: read    # This is required for actions/checkout
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        dotnet-version: [ '6.0.x' ]
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup .NET Core SDK ${{ matrix.dotnet-version }}
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: ${{ matrix.dotnet-version }}
+      - name: Install dependencies
+        run: dotnet restore
+        env:
+          AZUREDEVOPS_USERNAME: ${{ secrets.AZUREDEVOPS_USERNAME }}
+          AZUREDEVOPS_PASSWORD: ${{ secrets.AZUREDEVOPS_PASSWORD }}
+      - name: Build
+        run: dotnet build --configuration Release --no-restore
+      - name: Test
+        run: dotnet test --no-restore --verbosity normal
+        
+  build-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v2
+      - uses: aws-actions/setup-sam@v1
+      - uses: aws-actions/configure-aws-credentials@v1
+        with:
+          role-to-assume: arn:aws:iam::521106875068:role/GitHubAction-AssumeRoleWithAction
+          role-session-name: GitHub_to_AWS_via_FederatedOIDC
+          aws-region: ${{ env.AWS_REGION }}
+      # Hello from AWS: WhoAmI
+      - name: Sts GetCallerIdentity
+        run: |
+          aws sts get-caller-identity
